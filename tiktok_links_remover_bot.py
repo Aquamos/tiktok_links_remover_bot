@@ -12,31 +12,23 @@ from telegram.ext import (
     filters
 )
 
-# Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Bot configuration
-BOT_TOKEN = "7646304556:AAGVgl9oZk8r-mMGPY_6t2Ttr1MBczVeWIo"  # Replace with your actual token
-BOT_USERNAME = "tiktok_links_remover_bot"  # Without the @ symbol
+BOT_TOKEN = "7646304556:AAGVgl9oZk8r-mMGPY_6t2Ttr1MBczVeWIo"
+BOT_USERNAME = "tiktok_links_remover_bot"
 
-# Dictionary to store custom deletion times for different chats
 deletion_settings = {}
-# Dictionary to store messages scheduled for deletion
 scheduled_deletions = {}
 
-# Regular expression to match TikTok links
 TIKTOK_REGEX = re.compile(r'https?://(?:www\.|vm\.|vt\.)?tiktok\.com/[^\s]+')
 
-# Command handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send a message when the command /start is issued."""
     chat_type = update.effective_chat.type
     
     if chat_type == "private":
-        # In private chats, show interactive buttons
         keyboard = [
             [InlineKeyboardButton("Set Auto-Delete Timer", callback_data="set_timer")]
         ]
@@ -50,7 +42,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             reply_markup=reply_markup
         )
     else:
-        # In group chats, show command instructions
         await update.message.reply_text(
             "TikTok Link Handler Bot is now active in this group!\n\n"
             "Available commands:\n"
@@ -61,7 +52,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle button callbacks."""
     query = update.callback_query
     await query.answer()
     
@@ -72,24 +62,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         context.user_data["waiting_for_timer"] = True
     elif query.data.startswith("confirm_delete_"):
-        # Extract the message_id from the callback data
         try:
             seconds = int(query.data.split("_")[2])
             await query.edit_message_text(
                 f"TikTok links will now be automatically deleted after {seconds} seconds in this chat."
             )
-            # Save setting for this chat
             deletion_settings[query.message.chat_id] = seconds
         except (ValueError, IndexError):
             await query.edit_message_text("Invalid selection. Please try again.")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle incoming messages and check for TikTok links."""
-    # Skip processing for non-text messages
     if not update.message or not update.message.text:
         return
         
-    # Check if waiting for timer input (in private chat)
     if context.user_data.get("waiting_for_timer", False) and update.effective_chat.type == "private":
         try:
             seconds = int(update.message.text.strip())
@@ -107,30 +92,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 reply_markup=reply_markup
             )
             
-            # Reset waiting flag
             context.user_data["waiting_for_timer"] = False
             return
         except ValueError:
             await update.message.reply_text("Please enter a valid number of seconds.")
             return
     
-    # Check for TikTok links in the message
     if TIKTOK_REGEX.search(update.message.text):
         chat_id = update.effective_chat.id
         message_id = update.message.message_id
         
         try:
-            # Get bot's permissions in the chat
             chat_member = await context.bot.get_chat_member(chat_id, context.bot.id)
             can_delete = getattr(chat_member, "can_delete_messages", False)
             
-            # Check if this chat has auto-delete enabled
             if chat_id in deletion_settings:
                 delete_after = deletion_settings[chat_id]
                 
-                # Check if bot has permission to delete
                 if not can_delete:
-                    # Only send permission warning in group chats
                     if update.effective_chat.type != "private":
                         await update.message.reply_text(
                             "TikTok link detected, but I don't have permission to delete messages. "
@@ -138,17 +117,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         )
                     return
                     
-                # For group chats, optionally notify about deletion
                 notification = None
                 if update.effective_chat.type != "private":
                     notification = await update.message.reply_text(
                         f"TikTok link detected. It will be deleted in {delete_after} seconds."
                     )
                 
-                # Schedule deletion using job queue instead of threading.Timer
                 delete_time = datetime.now() + timedelta(seconds=delete_after)
                 
-                # Schedule message deletion
                 context.job_queue.run_once(
                     delete_message_job,
                     delete_after,
@@ -158,7 +134,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     }
                 )
                 
-                # Schedule notification deletion if there is one
                 if notification:
                     context.job_queue.run_once(
                         delete_message_job,
@@ -169,7 +144,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         }
                     )
             elif update.effective_chat.type != "private":
-                # If auto-delete is not enabled, inform in group chats
                 await update.message.reply_text(
                     "TikTok link detected. Auto-deletion is not enabled for this chat.\n"
                     "An admin can enable it with the command:\n"
@@ -179,7 +153,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             logger.error(f"Error processing TikTok link: {e}")
 
 async def delete_message_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Job to delete a message."""
     job = context.job
     data = job.data
     
@@ -193,7 +166,6 @@ async def delete_message_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error(f"Failed to delete message: {e}")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send a message when the command /help is issued."""
     chat_type = update.effective_chat.type
     
     if chat_type == "private":
@@ -206,7 +178,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "To use me in a group, add me to the group and make me an admin with 'Delete Messages' permission."
         )
     else:
-        # In group chats, show group-specific help
         await update.message.reply_text(
             "TikTok Link Handler Bot Commands for Groups:\n\n"
             "/set_timer [seconds] - Set auto-delete timer (e.g., /set_timer 60)\n"
@@ -217,7 +188,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
 
 async def set_timer_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /set_timer command."""
     if not context.args:
         await update.message.reply_text(
             "Please specify the number of seconds to wait before deleting TikTok links.\n"
@@ -231,7 +201,6 @@ async def set_timer_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             await update.message.reply_text("Please enter a positive number of seconds.")
             return
             
-        # Save setting for this chat
         chat_id = update.effective_chat.id
         deletion_settings[chat_id] = seconds
         
@@ -242,18 +211,15 @@ async def set_timer_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text("Please enter a valid number of seconds.")
 
 async def disable_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Disable auto-deletion for the current chat."""
     chat_id = update.effective_chat.id
     
     if chat_id in deletion_settings:
         del deletion_settings[chat_id]
-            
         await update.message.reply_text("Auto-deletion of TikTok links has been disabled for this chat.")
     else:
         await update.message.reply_text("Auto-deletion was not enabled for this chat.")
 
 async def group_chat_joined(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle the bot being added to a group."""
     await update.message.reply_text(
         "Thanks for adding me to this group!\n\n"
         "I can automatically delete TikTok links after a specific time period.\n\n"
@@ -264,15 +230,11 @@ async def group_chat_joined(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle errors."""
     logger.error(f"Update {update} caused error: {context.error}")
 
 def main():
-    """Start the bot."""
-    # Create the Application
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # Define commands to be displayed in Telegram UI
     commands = [
         BotCommand("start", "Start the bot"),
         BotCommand("set_timer", "Set auto-delete timer for TikTok links"),
@@ -280,26 +242,15 @@ def main():
         BotCommand("help", "Show available commands")
     ]
 
-    # Add handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("set_timer", set_timer_command))
     application.add_handler(CommandHandler("disable", disable_command))
     application.add_handler(CallbackQueryHandler(button_callback))
-    
-    # Handle the bot being added to a group
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, group_chat_joined))
-    
-    # Handle all messages that contain text
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    # Add error handler
     application.add_error_handler(error_handler)
-
-    # Set commands at startup
     application.bot.set_my_commands(commands)
-    
-    # Run the bot
     application.run_polling()
 
 if __name__ == "__main__":
