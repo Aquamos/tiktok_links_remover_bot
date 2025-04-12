@@ -17,7 +17,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-BOT_TOKEN = "7646304556:AAGVgl9oZk8r-mMGPY_6t2Ttr1MBczVeWIo"
+import os
+BOT_TOKEN = os.environ['BOT_TOKEN']
 BOT_USERNAME = "tiktok_links_remover_bot"
 
 deletion_settings = {}
