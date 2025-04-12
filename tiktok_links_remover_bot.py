@@ -1,6 +1,7 @@
 import re
 import logging
-import asyncio
+from flask import Flask
+import threading
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import (
@@ -233,6 +234,17 @@ async def group_chat_joined(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error(f"Update {update} caused error: {context.error}")
 
+# Keep-alive Flask server for Render
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return "TikTok Bot is running!"
+
+def run_flask():
+    app.run(host='0.0.0.0', port=10000)
+
+
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
 
@@ -255,4 +267,5 @@ def main():
     application.run_polling()
 
 if __name__ == "__main__":
+    threading.Thread(target=run_flask).start()
     main()
